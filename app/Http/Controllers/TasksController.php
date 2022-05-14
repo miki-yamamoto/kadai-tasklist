@@ -16,12 +16,23 @@ class TasksController extends Controller
     public function index()
     {
         // タスク一覧を取得
-        $tasks = Task::all();
+        // $tasks = Task::all();
+        $data = [];
+        if (\Auth::check()) { // 認証済みの場合
+            // 認証済みユーザを取得
+            $user = \Auth::user();
+            // ユーザの投稿の一覧を作成日時の降順で取得
+            // （後のChapterで他ユーザの投稿も取得するように変更しますが、現時点ではこのユーザの投稿のみ取得します）
+            $tasks = $user->tasks()->orderBy('created_at', 'desc')->paginate(10);
+
+            $data = [
+                'user' => $user,
+                'tasks' => $tasks,
+            ];
+        }
 
         // タスク一覧ビューでそれを表示
-        return view('tasks.index', [
-            'tasks' => $tasks,
-        ]);
+        return view('tasks.index', $data);
     }
 
     /**
@@ -54,10 +65,10 @@ class TasksController extends Controller
         ]);
 
         // タスクを作成
-        $task = new Task;
-        $task->status=$request->status;
-        $task->content = $request->content;
-        $task->save();
+        $request->user()->tasks()->create([
+            'content' => $request->content,
+            'status' => $request->status,
+        ]);
 
         // トップページへリダイレクトさせる
         return redirect('/');
@@ -73,6 +84,12 @@ class TasksController extends Controller
     {
          // idの値でタスクを検索して取得
         $task = Task::findOrFail($id);
+        
+        // ログインユーザーと該当タスクの持ち主が同じでないならば、表示していはいけないのでトップページにリダイレクトする
+        if (\Auth::id() != $task->user_id) {
+            // タスクを削除
+            return redirect('/');
+        }
 
         // タスク詳細ビューでそれを表示
         return view('tasks.show', [
@@ -90,6 +107,11 @@ class TasksController extends Controller
     {
          // idの値でタスクを検索して取得
         $task = Task::findOrFail($id);
+        
+        if (\Auth::id() != $task->user_id) {
+            // タスクを削除
+            return redirect('/');
+        }
 
         // タスク詳細ビューでそれを表示
         return view('tasks.edit', [
@@ -114,6 +136,12 @@ class TasksController extends Controller
        
         // idの値でメッセージを検索して取得
         $task = Task::findOrFail($id);
+        
+        if (\Auth::id() != $task->user_id) {
+            // タスクを削除
+            return redirect('/');
+        }
+        
         // タスクを更新
         $task->status=$request->status; 
         $task->content = $request->content;
@@ -132,9 +160,11 @@ class TasksController extends Controller
     public function destroy($id)
     {
         // idの値でタスクを検索して取得
-        $task = Task::findOrFail($id);
-        // タスクを削除
-        $task->delete();
+        $task = \App\Task::findOrFail($id);
+        if (\Auth::id()===$task->user_id) {
+            // タスクを削除
+            $task->delete();
+        }
 
         // トップページへリダイレクトさせる
         return redirect('/');
